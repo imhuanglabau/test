@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy to Windows Server
 
 on:
   push:
@@ -6,20 +6,16 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 16
+          node-version: '16'
 
       - name: Install dependencies
         run: npm install
@@ -27,8 +23,29 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Deploy to Windows Server
+        uses: appleboy/scp-action@v0.1.7
         with:
-          folder: dist
-          branch: gh-pages
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          source: "dist/*"
+          target: "C:/inetpub/wwwroot/test"
+          strip_components: 1
+          overwrite: true
+
+      - name: Setup IIS website
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          script: |
+            if (!(Test-Path "C:\inetpub\wwwroot\test")) { 
+              New-Item -ItemType Directory -Path "C:\inetpub\wwwroot\test"
+            }
+            Import-Module WebAdministration
+            if (!(Get-Website -Name "vue-test")) {
+              New-Website -Name "vue-test" -Port 80 -PhysicalPath "C:\inetpub\wwwroot\test" -Force
+            }
+            Start-Website -Name "vue-test"
